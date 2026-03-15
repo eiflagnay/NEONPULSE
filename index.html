@@ -153,7 +153,7 @@
 
         <div class="flex flex-col items-center mb-4 space-y-2">
             <div id="lanceStatus" class="text-xl font-bold neon-text-gold opacity-0 scale-90">ORBITAL LANCE: <span id="lanceTimerUI">0</span>s</div>
-            <div id="prismStatus" class="text-xl font-bold neon-text-teal opacity-0 scale-90">PRISM ARRAY: <span id="prismTimerUI">0</span>s</div>
+            <div id="prismStatus" class="text-xl font-bold neon-text-teal opacity-0 scale-90">PRISM ARRAY (LVL <span id="prismLevelUI">1</span>): <span id="prismTimerUI">0</span>s</div>
             <div id="hunterStatus" class="text-xl font-bold neon-text-magenta opacity-0 scale-90">VOID HUNTER BOT: <span id="hunterTimerUI">0</span>s</div>
             <div id="invincibleStatus" class="text-xl font-bold neon-text-white opacity-0 scale-90">OMEGA PULSE: <span id="invincibleTimer">0</span>s</div>
             <div id="droneStatus" class="text-xl font-bold neon-text-yellow opacity-0 scale-90">DRONES ACTIVE: <span id="droneCountUI">0</span></div>
@@ -178,10 +178,10 @@
     <div id="manualMenu" class="menu-screen hidden">
         <h2 class="text-4xl font-bold neon-text-green mb-8 uppercase tracking-widest">System Briefing</h2>
         <div class="w-full max-w-lg bg-gray-900/60 p-8 border border-green-500/30 rounded-lg space-y-6 text-sm leading-relaxed text-gray-200">
-            <p><span class="neon-text-blue font-bold">CONTROLS:</span> Lead the ship with mouse/touch. Avoid void blocks.</p>
-            <p><span class="neon-text-teal font-bold">PERKS:</span> Survive countdowns to unlock defensive modules like the Prism Array or Orbital Lance.</p>
-            <p><span class="neon-text-magenta font-bold">MULTIPLE PERKS:</span> Level 3 grants 2 modules. Level 5+ grants 3 modules per phase.</p>
-            <p><span class="neon-text-orange font-bold">ARMOR:</span> You start with 3 layers. Armor can stack infinitely.</p>
+            <p><span class="neon-text-blue font-bold">ARMOR BURST:</span> Reaching multiples of 10 Armor charges triggers a circular vaporizing explosion.</p>
+            <p><span class="neon-text-teal font-bold">PRISM CYCLE:</span> Levels 1-5 scale beam length. Level 5 is full-screen. Collecting more at Level 5 adds <span class="neon-text-green">+5s duration</span>.</p>
+            <p><span class="neon-text-gold font-bold">ORBITAL LANCE:</span> Manual high-intensity beam tracking cursor movement for tactical deletion.</p>
+            <p><span class="neon-text-magenta font-bold">VOID HUNTER:</span> Autonomous AI partner purges local threats recursively.</p>
         </div>
         <button id="closeManualBtn" class="neon-button mt-8">Return</button>
     </div>
@@ -242,6 +242,10 @@
                         const oG = this.ctx.createOscillator(); oG.type='sine'; oG.frequency.setValueAtTime(100, now);
                         oG.frequency.linearRampToValueAtTime(20, now + 1); gain.gain.setValueAtTime(0.2, now);
                         oG.connect(gain); oG.start(); oG.stop(now + 1); break;
+                    case 'overload':
+                        const oV = this.ctx.createOscillator(); oV.type='sawtooth'; oV.frequency.setValueAtTime(200, now);
+                        oV.frequency.linearRampToValueAtTime(40, now + 0.5); gain.gain.setValueAtTime(0.3, now);
+                        oV.connect(gain); oV.start(); oV.stop(now + 0.5); break;
                 }
             }
         };
@@ -251,7 +255,7 @@
         const startMenu = document.getElementById('startMenu'), manualMenu = document.getElementById('manualMenu'), archivesMenu = document.getElementById('archivesMenu'), intermissionMenu = document.getElementById('intermissionMenu'), gameOverMenu = document.getElementById('gameOverMenu');
         const scoreDisplay = document.getElementById('scoreDisplay'), levelDisplay = document.getElementById('levelDisplay'), timerDisplay = document.getElementById('timerDisplay'), multiplierDisplay = document.getElementById('multiplierDisplay');
         const armorStatus = document.getElementById('armorStatus'), invincibleStatus = document.getElementById('invincibleStatus'), droneStatusUI = document.getElementById('droneStatus'), decoyStatusUI = document.getElementById('decoyStatus'), hunterStatusUI = document.getElementById('hunterStatus'), prismStatusUI = document.getElementById('prismStatus'), lanceStatusUI = document.getElementById('lanceStatus');
-        const invincibleTimerUI = document.getElementById('invincibleTimer'), droneCountUI = document.getElementById('droneCountUI'), decoyTimerUI = document.getElementById('decoyTimerUI'), hunterTimerUI = document.getElementById('hunterTimerUI'), prismTimerUI = document.getElementById('prismTimerUI'), lanceTimerUI = document.getElementById('lanceTimerUI');
+        const invincibleTimerUI = document.getElementById('invincibleTimer'), droneCountUI = document.getElementById('droneCountUI'), decoyTimerUI = document.getElementById('decoyTimerUI'), hunterTimerUI = document.getElementById('hunterTimerUI'), prismTimerUI = document.getElementById('prismTimerUI'), lanceTimerUI = document.getElementById('lanceTimerUI'), prismLevelUI = document.getElementById('prismLevelUI');
         const perkSlotList = document.getElementById('perkSlotList'), continueButton = document.getElementById('continueButton');
         const leaderboardBody = document.getElementById('leaderboardBody'), highScoreMain = document.getElementById('highScoreMain'), topScoreHUD = document.getElementById('topScoreDisplayHUD');
 
@@ -265,21 +269,21 @@
             armorCount: 3, isInvincible: false, invincibleTimeRemaining: 0,
             drones: [], decoyActive: false, decoyTimeRemaining: 0, decoyX: 0, decoyY: 0, decoyVX: 0, decoyVY: 0,
             hunterActive: false, hunterTimeRemaining: 0, prismRayActive: false, prismRayTimer: 0, prismRayAngle: 0,
-            lanceActive: false, lanceTimer: 0, currentLevelSpeedMod: 1.0
+            prismRayLevel: 0, lanceActive: false, lanceTimer: 0, currentLevelSpeedMod: 1.0
         };
 
         const hunterBot = { active: false, x: 0, y: 0, radius: 15, timer: 0 };
 
         const PERKS = [
-            { id: 'armor', name: 'REINFORCEMENT', desc: '+1 Kinetic Armor.', apply: () => { player.armorCount++; } },
+            { id: 'armor', name: 'REINFORCEMENT', desc: '+1 Kinetic Armor.', apply: () => { incrementArmor(1); } },
             { id: 'bombs', name: 'NOVA STASH', desc: 'Spawn 3 Nova Bombs.', apply: () => { for(let i=0; i<3; i++) createCollectable('bomb'); } },
-            { id: 'slow', name: 'CHRONO LEAK', desc: 'Enemies 60% slower this level.', apply: () => { player.currentLevelSpeedMod = 0.4; } },
-            { id: 'multi', name: 'EFFICIENCY', desc: 'Instant +5 Multiplier.', apply: () => { multiplier += 5; } },
-            { id: 'drone', name: 'COMBAT DRONE', desc: 'New orbital guard (25s).', apply: () => { addDrone(25); } },
-            { id: 'prism', name: 'PRISM ARRAY', desc: '4 sweep rays (20s).', apply: () => { player.prismRayTimer = 20; player.prismRayActive = true; } },
+            { id: 'slow', name: 'CHRONO LEAK', desc: 'Enemies 60% slower.', apply: () => { player.currentLevelSpeedMod = 0.4; } },
+            { id: 'multi', name: 'EFFICIENCY', desc: '+5 Multiplier boost.', apply: () => { multiplier += 5; } },
+            { id: 'drone', name: 'COMBAT DRONE', desc: 'Add orbital guard (25s).', apply: () => { addDrone(25); } },
+            { id: 'prism', name: 'PRISM ARRAY', desc: 'Upgrade rays (Levels 1-5).', apply: () => { activatePrism(); } },
             { id: 'lance', name: 'ORBITAL LANCE', desc: 'Directable beam (15s).', apply: () => { player.lanceTimer = 15; player.lanceActive = true; } },
-            { id: 'hunter', name: 'VOID HUNTER', desc: 'Seeker bot + Purge.', apply: () => { activateHunter(15); } },
-            { id: 'invincibility', name: 'OMEGA PULSE', desc: 'Vaporize on contact.', apply: () => { 
+            { id: 'hunter', name: 'VOID HUNTER', desc: 'Seeker bot ally.', apply: () => { activateHunter(15); } },
+            { id: 'invincibility', name: 'OMEGA PULSE', desc: 'Total invulnerability.', apply: () => { 
                 const dur = [5, 10, 20]; const c = dur[Math.floor(Math.random()*3)];
                 player.invincibleTimeRemaining = Math.max(player.invincibleTimeRemaining, 0) + c; player.isInvincible = true;
             }}
@@ -302,6 +306,30 @@
             requestAnimationFrame(gameLoop);
         }
 
+        function incrementArmor(amt) {
+            const old = player.armorCount;
+            player.armorCount += amt;
+            const crossedThreshold = Math.floor(player.armorCount / 10) > Math.floor(old / 10);
+            if (crossedThreshold) { triggerArmorBurst(); }
+        }
+
+        function triggerArmorBurst() {
+            AudioEngine.play('overload');
+            screenShake = 15;
+            triggerBomb(player.x, player.y, true);
+            shockwaves.push({ x: player.x, y: player.y, currentRadius: 0, maxRadius: Math.max(canvas.width, canvas.height), life: 1.0, color: '#bc13fe' });
+        }
+
+        function activatePrism() {
+            player.prismRayActive = true;
+            if (player.prismRayLevel === 5) {
+                player.prismRayTimer += 5;
+            } else {
+                player.prismRayLevel++;
+                player.prismRayTimer = (player.prismRayLevel === 5) ? 8 : 20;
+            }
+        }
+
         function updateLeaderboardUI() {
             highScoreMain.innerText = `RECORD: ${String(highScore).padStart(5, '0')}`;
             topScoreHUD.innerText = `BEST: ${String(highScore).padStart(5, '0')}`;
@@ -320,7 +348,7 @@
             updateLeaderboardUI();
         }
 
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; player.x = canvas.width / 2; player.y = canvas.height / 2; player.targetX = player.x; player.targetY = player.y; }
         function addDrone(d) { player.drones.push({ timer: d, angle: Math.random()*6.28, rotSpeed: 0.08 + Math.random()*0.04 }); }
         function activateDecoy(d = 10) { player.decoyActive = true; player.decoyTimeRemaining = d; player.decoyX = player.x; player.decoyY = player.y; const a = Math.random()*6.28; player.decoyVX = Math.cos(a)*5; player.decoyVY = Math.sin(a)*5; }
         function activateHunter(d = 15) { hunterBot.active = true; hunterBot.timer = d; hunterBot.x = player.x; hunterBot.y = player.y; triggerBomb(player.x, player.y, true); }
@@ -328,8 +356,9 @@
         function startGame() {
             gameState = 'PLAYING'; score = 0; multiplier = 1; gameTime = 0; currentLevel = 1; levelTimer = 10;
             enemies = []; particles = []; collectables = []; shockwaves = [];
-            player.trail = []; player.armorCount = 3; player.isInvincible = false; player.drones = []; player.decoyActive = false;
-            hunterBot.active = false; player.prismRayActive = false; player.prismRayTimer = 0; player.lanceActive = false; player.lanceTimer = 0;
+            player.trail = []; player.armorCount = 3; player.prismRayLevel = 0;
+            player.isInvincible = false; player.drones = []; player.decoyActive = false;
+            hunterBot.active = false; player.prismRayActive = false; player.lanceActive = false; player.lanceTimer = 0;
             player.currentLevelSpeedMod = 1.0;
             updateUI(); startMenu.classList.add('hidden'); gameOverMenu.classList.add('hidden'); intermissionMenu.classList.add('hidden');
             document.getElementById('hud').classList.remove('hidden'); AudioEngine.play('lock');
@@ -344,12 +373,12 @@
             up(decoyStatusUI, decoyTimerUI, Math.ceil(player.decoyTimeRemaining), player.decoyActive);
             up(hunterStatusUI, hunterTimerUI, Math.ceil(hunterBot.timer), hunterBot.active);
             up(prismStatusUI, prismTimerUI, Math.ceil(player.prismRayTimer), player.prismRayActive);
+            prismLevelUI.innerText = player.prismRayLevel;
             up(lanceStatusUI, lanceTimerUI, Math.ceil(player.lanceTimer), player.lanceActive);
         }
 
         function triggerIntermission() {
-            gameState = 'INTERMISSION'; 
-            triggerBomb(player.x, player.y, true); 
+            gameState = 'INTERMISSION'; triggerBomb(player.x, player.y, true); 
             perkSlotList.innerHTML = ''; continueButton.classList.add('opacity-0'); intermissionMenu.classList.remove('hidden');
             let count = currentLevel+1 >= 5 ? 3 : (currentLevel+1 >= 3 ? 2 : 1);
             activePerks = [];
@@ -369,32 +398,16 @@
                         dEl.innerText = p.desc; dEl.classList.remove('opacity-0'); AudioEngine.play('lock');
                         setTimeout(() => rollNext(idx + 1), 400);
                     }
-                };
-                roll();
-            };
-            rollNext(0); updateUI();
+                }; roll();
+            }; rollNext(0); updateUI();
         }
 
-        function resumeFromIntermission() { 
-            player.currentLevelSpeedMod = 1.0; 
-            activePerks.forEach(p=>p.apply()); 
-            activePerks = []; 
-            currentLevel++; 
-            levelTimer = currentLevel*10; 
-            gameState='PLAYING'; 
-            intermissionMenu.classList.add('hidden'); 
-            AudioEngine.play('lock'); 
-            updateUI(); 
-        }
+        function resumeFromIntermission() { player.currentLevelSpeedMod = 1.0; activePerks.forEach(p=>p.apply()); activePerks = []; currentLevel++; levelTimer = currentLevel*10; gameState='PLAYING'; intermissionMenu.classList.add('hidden'); AudioEngine.play('lock'); updateUI(); }
 
         function createEnemy() {
             const side = Math.floor(Math.random()*4); let x,y,size = 15+Math.random()*25;
-            let bs = 1.1 + (currentLevel * 0.1); 
-            if (currentLevel > 5) bs = 1.6 + (currentLevel - 5) * 0.15;
-            if (currentLevel > 10) bs = 2.4 + (currentLevel - 10) * 0.35;
-            
+            let bs = 1.1 + (currentLevel * 0.1); if (currentLevel > 5) bs = 1.6 + (currentLevel - 5) * 0.15; if (currentLevel > 10) bs = 2.4 + (currentLevel - 10) * 0.35;
             if (gameState === 'MENU') bs = 1.5;
-            // The speed modifier (from perk) now correctly scales the total speed
             const speed = (bs + (gameTime/100000)) * player.currentLevelSpeedMod;
             if (side === 0) { x = -size; y = Math.random()*canvas.height; } else if (side === 1) { x = canvas.width+size; y = Math.random()*canvas.height; } else if (side === 2) { x = Math.random()*canvas.width; y = -size; } else { x = Math.random()*canvas.width; y = canvas.height+size; }
             const targetX = player.decoyActive ? player.decoyX : player.x, targetY = player.decoyActive ? player.decoyY : player.y;
@@ -407,24 +420,16 @@
             let type = forceType, color = '#00ff88', radius = 8;
             if (!type) {
                 const r = Math.random();
-                if (r < 0.08) type = 'bomb'; 
-                else if (r < 0.15) type = 'armor';
-                else if (r < 0.20) type = 'drone'; 
-                else if (r < 0.23) type = 'decoy';
-                else if (r < 0.26) type = 'hunter'; 
-                else if (r < 0.28) type = 'prism';
-                else if (r < 0.31) type = 'lance'; 
-                else if (r < 0.33) type = 'omega';
+                if (r < 0.08) type = 'bomb'; else if (r < 0.15) type = 'armor';
+                else if (r < 0.20) type = 'drone'; else if (r < 0.23) type = 'decoy';
+                else if (r < 0.26) type = 'hunter'; else if (r < 0.28) type = 'prism';
+                else if (r < 0.31) type = 'lance'; else if (r < 0.33) type = 'omega';
                 else type = 'cell';
             }
-            if (type === 'bomb') { color = '#ffaa00'; radius = 12; } 
-            else if (type === 'armor') { color = '#bc13fe'; radius = 12; }
-            else if (type === 'drone') { color = '#ffff00'; radius = 12; } 
-            else if (type === 'decoy') { color = '#00ffcc'; radius = 12; }
-            else if (type === 'hunter') { color = '#ff00ff'; radius = 14; } 
-            else if (type === 'prism') { color = '#00ffff'; radius = 14; }
-            else if (type === 'lance') { color = '#ffcc00'; radius = 14; } 
-            else if (type === 'omega') { color = '#ffffff'; radius = 14; }
+            if (type === 'bomb') { color = '#ffaa00'; radius = 12; } else if (type === 'armor') { color = '#bc13fe'; radius = 12; }
+            else if (type === 'drone') { color = '#ffff00'; radius = 12; } else if (type === 'decoy') { color = '#00ffcc'; radius = 12; }
+            else if (type === 'hunter') { color = '#ff00ff'; radius = 14; } else if (type === 'prism') { color = '#00ffff'; radius = 14; }
+            else if (type === 'lance') { color = '#ffcc00'; radius = 14; } else if (type === 'omega') { color = '#ffffff'; radius = 14; }
             collectables.push({ x: Math.random()*(canvas.width-60)+30, y: Math.random()*(canvas.height-60)+30, radius, pulse: 0, type, color });
         }
 
@@ -447,17 +452,14 @@
             if (gameState === 'PLAYING') levelTimer -= dtSec; 
             if (levelTimer <= 0 && gameState === 'PLAYING') { triggerIntermission(); return; }
             if (player.isInvincible) { player.invincibleTimeRemaining -= dtSec; if (player.invincibleTimeRemaining <= 0) player.isInvincible = false; }
-            if (player.prismRayActive) { player.prismRayAngle += 0.05; player.prismRayTimer -= dtSec; if (player.prismRayTimer <= 0) player.prismRayActive = false; }
+            if (player.prismRayActive) { player.prismRayAngle += 0.05; player.prismRayTimer -= dtSec; if (player.prismRayTimer <= 0) { player.prismRayActive = false; if (player.prismRayLevel === 5) player.prismRayLevel = 0; } }
             if (player.lanceActive) { player.lanceTimer -= dtSec; if (player.lanceTimer <= 0) player.lanceActive = false; }
             if (hunterBot.active) { hunterBot.timer -= dtSec; if (enemies.length > 0) { let cl = enemies.reduce((p, c) => (Math.sqrt((c.x-hunterBot.x)**2 + (c.y-hunterBot.y)**2) < Math.sqrt((p.x-hunterBot.x)**2 + (p.y-hunterBot.y)**2)) ? c : p); const a = Math.atan2(cl.y - hunterBot.y, cl.x - hunterBot.x); hunterBot.x += Math.cos(a)*15; hunterBot.y += Math.sin(a)*15; } else { hunterBot.x += (player.x - hunterBot.x)*0.1; hunterBot.y += (player.y - hunterBot.y)*0.1; } if (hunterBot.timer <= 0) hunterBot.active = false; }
             for (let i = player.drones.length-1; i >= 0; i--) { const d = player.drones[i]; d.timer -= dtSec; d.angle += d.rotSpeed; if (d.timer <= 0) player.drones.splice(i, 1); }
             if (player.decoyActive) { player.decoyX += player.decoyVX; player.decoyY += player.decoyVY; if (player.decoyX < 50 || player.decoyX > canvas.width - 50) player.decoyVX *= -1; if (player.decoyY < 50 || player.decoyY > canvas.height - 50) player.decoyVY *= -1; player.decoyTimeRemaining -= dtSec; if (player.decoyTimeRemaining <= 0) player.decoyActive = false; }
             player.x += (player.targetX - player.x) * 0.15; player.y += (player.targetY - player.y) * 0.15;
             player.trail.push({x: player.x, y: player.y}); if (player.trail.length > 15) player.trail.shift();
-            
-            let baseSpawn = 0.01 + (currentLevel * 0.002);
-            if (currentLevel > 5) baseSpawn = 0.02 + (currentLevel - 5) * 0.005;
-            if (gameState === 'MENU') baseSpawn = 0.03;
+            let baseSpawn = 0.01 + (currentLevel * 0.002); if (currentLevel > 5) baseSpawn = 0.02 + (currentLevel - 5) * 0.005; if (gameState === 'MENU') baseSpawn = 0.03;
             if (Math.random() < baseSpawn) createEnemy();
             if (Math.random() < 0.01) createCollectable();
             for (let i = shockwaves.length - 1; i >= 0; i--) { const s = shockwaves[i]; s.currentRadius += 20; s.life -= 0.02; if (s.life <= 0) shockwaves.splice(i, 1); }
@@ -467,13 +469,16 @@
                 if (gameState === 'MENU') { if(e.x < -200 || e.x > canvas.width+200 || e.y < -200 || e.y > canvas.height+200) enemies.splice(i, 1); continue; }
                 let killed = false;
                 if (hunterBot.active && Math.sqrt((e.x-hunterBot.x)**2+(e.y-hunterBot.y)**2) < e.size/2+15) killed = true;
-                if (!killed && player.prismRayActive) { for(let j=0; j<4; j++) { const ba = player.prismRayAngle + (j*Math.PI/2); const cross = Math.abs((e.y-player.y)*Math.cos(ba) - (e.x-player.x)*Math.sin(ba)); if(cross < e.size/2+5) { killed = true; break; } } }
+                if (!killed && player.prismRayActive) {
+                    const bl = player.prismRayLevel === 1 ? 100 : player.prismRayLevel === 2 ? 150 : player.prismRayLevel === 3 ? 300 : player.prismRayLevel === 4 ? 350 : 2000;
+                    for(let j=0; j<4; j++) { const ba = player.prismRayAngle + (j*Math.PI/2); if (Math.sqrt((e.x-player.x)**2 + (e.y-player.y)**2) < bl) { if(Math.abs((e.y-player.y)*Math.cos(ba)-(e.x-player.x)*Math.sin(ba))<e.size/2+5){ killed=true; break; } } }
+                }
                 if (!killed && player.lanceActive) { const ba = Math.atan2(player.targetY-player.y, player.targetX-player.x); if(Math.abs((e.y-player.y)*Math.cos(ba) - (e.x-player.x)*Math.sin(ba)) < e.size/2+8) killed = true; }
                 if (!killed) { player.drones.forEach(d => { if(Math.sqrt((e.x-(player.x+Math.cos(d.angle)*60))**2+(e.y-(player.y+Math.sin(d.angle)*60))**2) < e.size/2+10) killed = true; }); }
                 if (killed) { createExplosion(e.x, e.y, e.color, 10); score += 50*multiplier; enemies.splice(i, 1); AudioEngine.play('explosion'); continue; }
                 if (Math.sqrt((e.x-player.x)**2+(e.y-player.y)**2) < e.size/2+player.radius) { if (player.isInvincible) { createExplosion(e.x, e.y, '#ffffff', 15); enemies.splice(i, 1); score += 100*multiplier; } else if (player.armorCount > 0) { player.armorCount--; createExplosion(e.x, e.y, '#ff007a', 10); AudioEngine.play('shield_lost'); updateUI(); enemies.splice(i, 1); } else { saveScore(Math.floor(score), currentLevel); document.getElementById('finalScore').innerText = `SCORE: ${Math.floor(score)}`; document.getElementById('finalLevel').innerText = `LEVEL: ${currentLevel}`; gameOverMenu.classList.remove('hidden'); gameState = 'GAMEOVER'; AudioEngine.play('gameover'); } }
             }
-            for (let i = collectables.length-1; i >= 0; i--) { const c = collectables[i]; if (Math.sqrt((c.x-player.x)**2+(c.y-player.y)**2) < c.radius+player.radius+10) { collectables.splice(i,1); if(c.type==='bomb') triggerBomb(player.x,player.y); else if(c.type==='armor') player.armorCount++; else if(c.type==='drone') addDrone(25); else if(c.type==='decoy') activateDecoy(); else if(c.type==='hunter') activateHunter(15); else if(c.type==='prism') { player.prismRayTimer=20; player.prismRayActive=true; } else if(c.type==='lance') { player.lanceTimer=15; player.lanceActive=true; } else if(c.type==='omega') { player.invincibleTimeRemaining=10; player.isInvincible=true; } else { multiplier++; score += 500; } AudioEngine.play('pickup'); createExplosion(c.x,c.y,c.color,15); updateUI(); } }
+            for (let i = collectables.length-1; i >= 0; i--) { const c = collectables[i]; if (Math.sqrt((c.x-player.x)**2+(c.y-player.y)**2) < c.radius+player.radius+10) { collectables.splice(i,1); if(c.type==='bomb') triggerBomb(player.x,player.y); else if(c.type==='armor') incrementArmor(1); else if(c.type==='drone') addDrone(25); else if(c.type==='decoy') activateDecoy(); else if(c.type==='hunter') activateHunter(15); else if(c.type==='prism') activatePrism(); else if(c.type==='lance') { player.lanceTimer=15; player.lanceActive=true; } else if(c.type==='omega') { player.invincibleTimeRemaining=10; player.isInvincible=true; } else { multiplier++; score += 500; } AudioEngine.play('pickup'); createExplosion(c.x,c.y,c.color,15); updateUI(); } }
             for (let i = particles.length-1; i >= 0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].life -= particles[i].decay; if (particles[i].life <= 0) particles.splice(i,1); }
             scoreDisplay.innerText = `SCORE: ${String(Math.floor(score)).padStart(5, '0')}`; updateUI(); if (screenShake > 0) screenShake *= 0.9;
         }
@@ -486,56 +491,15 @@
             for(let y=-(gameTime/20)%50; y<canvas.height; y+=50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
             shockwaves.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.currentRadius, 0, 6.28); ctx.strokeStyle = s.color + Math.floor(s.life*255).toString(16).padStart(2,'0'); ctx.lineWidth = 4; ctx.stroke(); });
             particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); }); ctx.globalAlpha = 1.0;
-            collectables.forEach(c => {
-                const s = c.radius+Math.sin(gameTime/200)*3;
-                ctx.shadowBlur = 15; ctx.shadowColor = c.color; ctx.strokeStyle = c.color; ctx.lineWidth = 2;
-                ctx.save();
-                ctx.translate(c.x, c.y);
-                switch(c.type) {
-                    case 'bomb':
-                        ctx.rotate(0.78); ctx.strokeRect(-s,-s,s*2,s*2); 
-                        ctx.beginPath(); ctx.moveTo(-s,0); ctx.lineTo(s,0); ctx.moveTo(0,-s); ctx.lineTo(0,s); ctx.stroke();
-                        break;
-                    case 'armor':
-                        ctx.beginPath(); for(let i=0; i<6; i++){ ctx.lineTo(Math.cos(i*1.04)*s, Math.sin(i*1.04)*s); } ctx.closePath(); ctx.stroke();
-                        ctx.beginPath(); ctx.arc(0,0,2,0,6.28); ctx.fill();
-                        break;
-                    case 'drone':
-                        ctx.beginPath(); ctx.moveTo(0,-s); ctx.lineTo(s,s); ctx.lineTo(-s,s); ctx.closePath(); ctx.stroke();
-                        break;
-                    case 'decoy':
-                        ctx.beginPath(); ctx.arc(0,0,s,0,6.28); ctx.stroke();
-                        ctx.beginPath(); ctx.arc(0,0,s*0.4,0,6.28); ctx.stroke();
-                        break;
-                    case 'hunter':
-                        ctx.beginPath(); for(let i=0; i<8; i++){ let r=i%2?s:s*0.4; ctx.lineTo(Math.cos(i*0.78)*r, Math.sin(i*0.78)*r); } ctx.closePath(); ctx.stroke();
-                        break;
-                    case 'prism':
-                        ctx.strokeRect(-s,-s,s*2,s*2);
-                        ctx.beginPath(); ctx.moveTo(-s*0.6,0); ctx.lineTo(s*0.6,0); ctx.moveTo(0,-s*0.6); ctx.lineTo(0,s*0.6); ctx.stroke();
-                        break;
-                    case 'lance':
-                        ctx.beginPath(); ctx.moveTo(0,-s); ctx.lineTo(s*0.3,s); ctx.lineTo(-s*0.3,s); ctx.closePath(); ctx.stroke();
-                        break;
-                    case 'omega':
-                        ctx.beginPath(); ctx.arc(0,0,s,0,6.28); ctx.stroke();
-                        ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1.0;
-                        break;
-                    case 'cell':
-                    default:
-                        ctx.strokeRect(-s,-s,s*2,s*2);
-                        ctx.strokeRect(-s*0.4,-s*0.4,s*0.8,s*0.8);
-                        break;
-                }
-                ctx.restore();
-            });
+            collectables.forEach(c => { const s = c.radius+Math.sin(gameTime/200)*3; ctx.shadowBlur = 15; ctx.shadowColor = c.color; ctx.strokeStyle = c.color; ctx.lineWidth = 2; ctx.save(); ctx.translate(c.x, c.y); switch(c.type) { case 'bomb': ctx.rotate(0.78); ctx.strokeRect(-s,-s,s*2,s*2); ctx.beginPath(); ctx.moveTo(-s,0); ctx.lineTo(s,0); ctx.moveTo(0,-s); ctx.lineTo(0,s); ctx.stroke(); break; case 'armor': ctx.beginPath(); for(let i=0; i<6; i++){ ctx.lineTo(Math.cos(i*1.04)*s, Math.sin(i*1.04)*s); } ctx.closePath(); ctx.stroke(); break; case 'drone': ctx.beginPath(); ctx.moveTo(0,-s); ctx.lineTo(s,s); ctx.lineTo(-s,s); ctx.closePath(); ctx.stroke(); break; case 'decoy': ctx.beginPath(); ctx.arc(0,0,s,0,6.28); ctx.stroke(); ctx.beginPath(); ctx.arc(0,0,s*0.4,0,6.28); ctx.stroke(); break; case 'hunter': ctx.beginPath(); for(let i=0; i<8; i++){ let r=i%2?s:s*0.4; ctx.lineTo(Math.cos(i*0.78)*r, Math.sin(i*0.78)*r); } ctx.closePath(); ctx.stroke(); break; case 'prism': ctx.strokeRect(-s,-s,s*2,s*2); ctx.beginPath(); ctx.moveTo(-s*0.6,0); ctx.lineTo(s*0.6,0); ctx.moveTo(0,-s*0.6); ctx.lineTo(0,s*0.6); ctx.stroke(); break; case 'lance': ctx.beginPath(); ctx.moveTo(0,-s); ctx.lineTo(s*0.3,s); ctx.lineTo(-s*0.3,s); ctx.closePath(); ctx.stroke(); break; case 'omega': ctx.beginPath(); ctx.arc(0,0,s,0,6.28); ctx.stroke(); ctx.globalAlpha = 0.5; ctx.fill(); ctx.globalAlpha = 1.0; break; default: ctx.strokeRect(-s,-s,s*2,s*2); ctx.strokeRect(-s*0.4,-s*0.4,s*0.8,s*0.8); break; } ctx.restore(); });
             enemies.forEach(e => { ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(e.rotation); ctx.shadowBlur=10; ctx.shadowColor=e.color; ctx.strokeStyle=e.color; ctx.lineWidth=3; ctx.strokeRect(-e.size/2,-e.size/2,e.size,e.size); ctx.restore(); });
-            if (player.prismRayActive) { ctx.shadowBlur=20; ctx.shadowColor='#00ffff'; ctx.strokeStyle='rgba(0, 255, 255, 0.8)'; ctx.lineWidth=4; for(let i=0; i<4; i++){ const a=player.prismRayAngle+(i*1.57); ctx.beginPath(); ctx.moveTo(player.x,player.y); ctx.lineTo(player.x+Math.cos(a)*2000, player.y+Math.sin(a)*2000); ctx.stroke(); } }
+            if (player.prismRayActive) { const bl = player.prismRayLevel === 1 ? 100 : player.prismRayLevel === 2 ? 150 : player.prismRayLevel === 3 ? 300 : player.prismRayLevel === 4 ? 350 : 2000; ctx.shadowBlur=20; ctx.shadowColor='#00ffff'; ctx.strokeStyle='rgba(0, 255, 255, 0.8)'; ctx.lineWidth=4; for(let i=0; i<4; i++){ const a=player.prismRayAngle+(i*1.57); ctx.beginPath(); ctx.moveTo(player.x,player.y); ctx.lineTo(player.x+Math.cos(a)*bl, player.y+Math.sin(a)*bl); ctx.stroke(); } }
             if (player.lanceActive) { ctx.shadowBlur=25; ctx.shadowColor='#ffcc00'; ctx.strokeStyle='rgba(255,204,0,0.9)'; ctx.lineWidth=6; const a=Math.atan2(player.targetY-player.y, player.targetX-player.x); ctx.beginPath(); ctx.moveTo(player.x,player.y); ctx.lineTo(player.x+Math.cos(a)*2000, player.y+Math.sin(a)*2000); ctx.stroke(); ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke(); }
             if (hunterBot.active) { ctx.shadowBlur=30; ctx.shadowColor='#ff00ff'; ctx.strokeStyle='#f0f'; ctx.lineWidth=4; ctx.beginPath(); for(let i=0; i<12; i++){ let r=15+Math.sin(gameTime/30)*5; ctx.lineTo(hunterBot.x+Math.cos(i*0.52)*(i%2?r:r*0.6), hunterBot.y+Math.sin(i*0.52)*(i%2?r:r*0.6)); } ctx.closePath(); ctx.stroke(); }
             if (player.decoyActive) { ctx.shadowBlur=20; ctx.shadowColor='#0ff'; ctx.strokeStyle='#0ff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(player.decoyX, player.decoyY, 15+Math.sin(gameTime/50) * 5, 0, 6.28); ctx.stroke(); }
             player.drones.forEach((d, idx) => { const r=60+(idx*20), dx=player.x+Math.cos(d.angle)*r, dy=player.y+Math.sin(d.angle)*r; ctx.shadowBlur=15; ctx.shadowColor='#ff0'; ctx.fillStyle='#ff0'; ctx.beginPath(); ctx.moveTo(dx,dy-8); ctx.lineTo(dx+8,dy+6); ctx.lineTo(dx-8,dy+6); ctx.closePath(); ctx.fill(); });
-            if (gameState!=='GAMEOVER') { ctx.shadowBlur=20; ctx.shadowColor=player.isInvincible?'#fff':player.color; ctx.fillStyle=player.isInvincible?'#fff':player.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, 6.28); ctx.fill(); if(player.armorCount>0 && (gameState==='PLAYING'||gameState==='INTERMISSION')){ ctx.shadowBlur=15; ctx.shadowColor='#bc13fe'; ctx.strokeStyle='#bc13fe'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(player.x,player.y, player.radius+10+Math.sin(gameTime/150)*3, 0, 6.28); ctx.stroke(); } }
+            ctx.shadowBlur = 20; ctx.shadowColor = player.isInvincible ? '#fff' : player.color; ctx.fillStyle = player.isInvincible ? '#fff' : player.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, 6.28); ctx.fill();
+            if (player.isInvincible) { ctx.shadowBlur = 30; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius+15+Math.sin(gameTime/50)*5, 0, 6.28); ctx.stroke(); } else if (player.armorCount > 0 && gameState!=='MENU') { ctx.shadowBlur = 15; ctx.shadowColor = '#bc13fe'; ctx.strokeStyle = '#bc13fe'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius+10+Math.sin(gameTime/150)*3, 0, 6.28); ctx.stroke(); }
             ctx.restore();
         }
 
